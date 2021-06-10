@@ -1,0 +1,10 @@
+{
+  "auth": {
+    "valpase7408c80": {
+      "service": "Cognito",
+      "providerPlugin": "awscloudformation",
+      "dependsOn": [],
+      "customAuth": false
+    }
+  }
+}

@@ -1,0 +1,76 @@
+name: Valpas App CI/CD
+
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+    branches: [develop, master]
+
+jobs:
+  publish:
+    name: Install and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup repo
+        uses: actions/checkout@v2
+
+      - name: Setup node
+        uses: actions/setup-node@v1
+        with:
+          node-version: 12.x
+
+      - uses: expo/expo-github-action@v5
+        with:
+          expo-version: 3.x
+          expo-username: ${{ secrets.EXPO_CLI_USERNAME }}
+          expo-password: ${{ secrets.EXPO_CLI_PASSWORD }}
+
+      - run: yarn install
+      - run: yarn lint
+      - run: expo doctor
+
+      - name: Set Amplify dev environment
+        if: (github.event_name == 'push' && endsWith(github.ref, '/develop')) || (github.event_name == 'pull_request' && github.base_ref == 'develop')
+        run: |
+          echo "AMPLIFY_ENV=dev" >> $GITHUB_ENV
+
+      - name: Set Amplify prod environment
+        if: (github.event_name == 'push' && endsWith(github.ref, '/master')) || (github.event_name == 'pull_request' && github.base_ref == 'master')
+        run: |
+          echo "::set-env name=AMPLIFY_ENV::prod"
+
+      - name: Configure Amplify
+        uses: ambientlight/amplify-cli-action@0.2.1
+        with:
+          amplify_command: configure
+          amplify_env: ${{ env.AMPLIFY_ENV }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+
+      - name: Check Amplify status
+        uses: ambientlight/amplify-cli-action@0.2.1
+        with:
+          amplify_command: status
+          amplify_env: ${{ env.AMPLIFY_ENV }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+
+      # *: Currently takes 10 minutes, debug as killing CI/CD minutes
+      # - name: Publish on PR
+      #   if: github.event_name == 'pull_request'
+      #   run: expo publish --release-channel=pr-${{ github.event.number }}
+
+      - name: Publish on Merge
+        if: github.event_name == 'push'
+        run: expo publish
+
+      - if: github.event_name == 'pull_request'
+        uses: unsplash/comment-on-pr@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          msg: App is ready for review, you can [see it here](https://expo.io/@${{ secrets.EXPO_CLI_USERNAME }}/valpas-app?release-channel=pr-${{ github.event.number }}).
